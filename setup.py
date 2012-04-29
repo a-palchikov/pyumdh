@@ -12,7 +12,7 @@ options = {'py2exe': \
 }
 setup(
 	name = 'pyumdh',
-	console=[r'pyumdh\pyumdh.py'],
+	console=[r'pyumdh\umdh.py'],
 	version = '0.0.1',
 	description = 'automates umdh and provides useful abstractions to help with backtrace analysis',
 	author = 'deemok@gmail.com',
