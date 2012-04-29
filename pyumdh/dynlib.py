@@ -1,4 +1,3 @@
-
 from ctypes import windll, WinDLL, LibraryLoader, GetLastError, \
         windll as windll0, FormatError, WinError, Structure
 from ctypes.wintypes import WORD, BYTE
@@ -6,7 +5,7 @@ import os
 import sys
 import pdb
 
-__all__ = ['wdll', 'windll', 'bg_errcheck', 'module_path']
+__all__ = ['wdll', 'windll', 'module_path']
 
 def _frozen():
     return hasattr(sys, 'frozen')
@@ -118,11 +117,3 @@ class WinDll(WinDLL):
         return func
 
 windll = LibraryLoader(WinDll)
-
-class MESSAGE_RESOURCE_ENTRY(Structure):
-    _fields_ = [
-        ('Length', WORD),
-        ('Flags', WORD),
-        ('Text', BYTE * 1),
-    ]
-
