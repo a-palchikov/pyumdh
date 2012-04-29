@@ -1,4 +1,3 @@
-
 from ctypes import *
 from ctypes.wintypes import HANDLE, DWORD
 import os.path
@@ -77,7 +76,6 @@ class SymbolProvider(object):
         self._shutdown = False
 
     def cleanup(self):
-        print 'SymProvider: cleanup'
         self._shutdown = True
         SymCleanup(self._id)
 
