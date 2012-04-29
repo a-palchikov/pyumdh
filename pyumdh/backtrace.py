@@ -1,8 +1,8 @@
 import re
 import pdb
 from collections import namedtuple
-from itertools import ifilter
-from symprovider import format_symbol_module
+#from itertools import ifilter
+from pyumdh.symprovider import format_symbol_module
 import os
 import sys
 import pyumdh.config as config
