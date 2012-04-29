@@ -1,4 +1,3 @@
-
 import re
 import pdb
 from collections import namedtuple
@@ -12,44 +11,6 @@ try:
 except ImportError:
     import pickle
 
-
-"""
-# use full blown parsing support (why, anyone?..)
-from pyparsing import
-
-# Backtrace log is a snapshot of a process's memory comprised of a list
-# of backtraces describing separate memory allocations (and frees)
-# Typical use scenario is taking two logs and diffing them to see what's
-# been allocated in-between
-
-
-# backtrace grammar
-comment = '//' + restOfLine
-
-dbg_meta = 'DBGHELP: ' + restOfLine
-dbg_meta_path = restOfLine
-
-number = Word(hexnums)
-plus = Word('+', max=1)
-backtrace_id = 'Backtrace' + number
-empty_line = NEWLINE
-
-dummy_prefix = '*- - - - - - - - - - '
-dummy_suffix = ' - - - - - - - - - -'
-heap_header_0 = blah-blah
-heap_header = (dummy_prefix + 'Start of data for heap @' + \
-                    number + dummy_suffix).setParseAction(handleHeapStart())
-heap_dummy_0 = 'REQUESTED bytes + OVERHEAD at ADDRESS by BackTraceID' + \
-                restOfLine
-heap_dummy_1 = 'STACK if not already dumped.' + restOfLine
-heap_hogs_line = dummy_prefix + 'Heap ' + number + ' Hogs' + \
-                dummy_suffix
-backtrace_header = (number + 'bytes' + plus + number + \
-                    'at' + number + 'by' + backtrace_id).setParseAction(handleAllocation())
-backtrace = OneOrMore(number) + empty_line
-
-# ...
-"""
 
 # parsing helpers
 def _next_line(f):
