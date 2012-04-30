@@ -27,7 +27,15 @@ def _next_line(f):
 def _parse_stack(f):
     """Parse stack as a list of addresses"""
     addrs = []
+    pos = f.tell()
     line = f.readline()
+    # FIXME check for stack condition first (that it starts with '\t') and
+    # rewind/bail out otherwise
+    if not line or line == '\n':
+        return addrs
+    elif not line.startswith('\t'):
+        f.seek(pos, os.SEEK_SET)
+        return addrs
     while line and line != '\n' and line.startswith('\t'):
         addrs.append(int(line.strip('\t\n'), 16))
         line = f.readline()
@@ -79,7 +87,7 @@ class Backtrace(object):
             self._print('Heap: 0x%X, allocations: %d' % (k, len(v)), fileobject)
 
     def dump_modules(self, fileobject=None):
-        print 'Modules:'
+        self._print('Modules:', fileobject)
         for module in self._modules.itervalues():
             self._print('%s @ 0x%X, size=%d' % (module.ModuleName, module.BaseOfImage, \
                     module.SizeOfImage), fileobject)
@@ -106,6 +114,8 @@ class Backtrace(object):
             self._print('Heap @ 0x%X' % handle, fileobject=fileobject)
             for traceid, alloc in filter(grepfn, heap.iteritems()):
                 self._print('Traceid: 0x%x' % int(traceid, 16), fileobject=fileobject)
+                self._print('Allocations: [%s]' % ','.join(map(hex, \
+                    [addr for _,_,addr in alloc.allocs])), fileobject)
                 self._dump_stack(alloc.stack, symbols=symbols, \
                         fileobject=fileobject)
 
@@ -127,15 +137,28 @@ class Backtrace(object):
         diff._modules = backtrace._modules
         for handle, heap in self._heaps.iteritems():
             # work for each overlapping heap
-            other_heap = backtrace._heaps.get(handle)
-            if other_heap:
+            otherheap = backtrace._heaps.get(handle)
+            if otherheap:
+                otherheapset = frozenset(otherheap)
                 # filter all traces not present in original heap
-                difftraces = frozenset(other_heap).difference(heap)
+                difftraces = otherheapset.difference(heap)
                 # FIXME maybe treat dicts and iterables alike as values for
                 # self._heaps???
                 diffallocs = filter(grepfn, filter(diff_filter(difftraces), \
-                                    other_heap.iteritems()))
-                diff._heaps.setdefault(handle, dict(diffallocs))
+                                    otherheap.iteritems()))
+                diffheap = diff._heaps.setdefault(handle, dict(diffallocs))
+                # now, compute the differences on the allocation level
+                commontraces = otherheapset.intersection(heap)
+                for trace in commontraces:
+                    a0 = frozenset(heap.get(trace).allocs)
+                    a1 = frozenset(otherheap.get(trace).allocs)
+                    adiff = list(a1 - a0)
+                    if adiff:
+                        #pdb.set_trace()
+                        alloc = otherheap.get(trace)
+                        allocdiff = self.allocation(stack=alloc.stack, \
+                                allocs=adiff)
+                        diffheap.setdefault(trace, allocdiff)
         return diff
 
     def save(self, fileobject):
@@ -165,6 +188,7 @@ class Backtrace(object):
         while line:
             m = self._allocstats_re_.search(line)
             if m:
+                #pdb.set_trace()
                 requested, overhead, addr, traceid = m.group(1, 2, 3, 4)
                 item = allocs.setdefault(traceid, None)
                 # parse allocation
@@ -178,7 +202,7 @@ class Backtrace(object):
                     item.allocs.append(sample)
                 else:
                     allocs.update({traceid: self.allocation(stack=stack, \
-                                                allocs=list(sample))})
+                                                allocs=[sample])})
             elif line.startswith('*- - - - - - - - - - End of data for heap'):
                 break
             line = _next_line(f)

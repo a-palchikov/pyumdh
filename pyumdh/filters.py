@@ -95,21 +95,17 @@ class ForeignModule(object):
                     if not _pattern(symbol, self._allocpatterns):
                         if _trusted_module(module):
                             matched, self._toinclude = (True, False)
-                            break
                         elif self._trustedpatterns:
                             # otherwise, complete stack processing looking for
                             # a trusted pattern (which need not be the one
                             # following the allocator!)
-                            while not matched:
+                            while not _pattern(symbol, self._trustedpatterns):
                                 # State: matching a trusted pattern (if any)
                                 sym, _, module = self._symbols.sym_from_addr(self._trace, (yield))
                                 symbol = _format_symbol(sym, module)
-                                if _pattern(symbol, self._trustedpatterns):
-                                    matched, self._toinclude = (True, False)
-                                    break
+                            matched, self._toinclude = (True, False)
                         else:
                             matched, self._toinclude = (True, True)
-                            break
 
 
 def filter_on_foreign_module(trace, symbols, trustedmodules=None, \
