@@ -1,9 +1,11 @@
-        pyumdh: use python to find memory leaks in your native windows apps
+pyumdh: use python to find memory leaks in your native windows apps
+===================================================================
 
 pyumdh is a collection of utils aimed to help in tracking memory leaks in native windows apps.
 Note, that this is not a stand-alone memory leak detector and requires the initial use of
 UMDH (user mode dump heap tool) from debugging tools for windows.
 UMDH is used to boostrap these scripts with the initial set of memory snapshots.
+Also, it is a not particularly user-friendly (as in GUI) and requires heavy use of python for analysis.
 
 Currently, helpers the toolkit provides, fall in two main categories:
         * automating UMDH
