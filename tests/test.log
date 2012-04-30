@@ -1,0 +1,167 @@
+// 
+// UMDH: version 6.1.7650.0: Logtime 2012-04-30 12:09 - Machine=HCE-C2SFLQ1 - PID=7696
+// 
+
+// Debug privilege has been enabled.
+// OS version 6.1 
+// Umdh OS version 6.1
+// 
+// Preparing to dump heap allocations.
+// Only allocations for which the heap manager collected a stack are dumped. Allocations whithout stack are ignored.
+// The stack trace for an allocation is dumped as a list of addresses. They will be resolved to function names at compare time.
+// 
+// Connecting to process 7696 ...
+// Process 7696 opened handle=44.
+// Loaded modules: 
+//     Base Size Module
+//              400000   11D000 D:\blah\blah\app.exe
+//            77650000   180000 C:\Windows\SysWOW64\ntdll.dll
+//            75980000   100000 C:\Windows\syswow64\kernel32.dll
+//            75A80000    46000 C:\Windows\syswow64\KERNELBASE.dll
+//            74560000   19E000 C:\Windows\WinSxS\x86_microsoft.windows.common-controls_6595b64144ccf1df_6.0.7600.16661_none_420fe3fa2b8113bd\COMCTL32.dll
+//            76F20000    8F000 C:\Windows\syswow64\OLEAUT32.dll
+//            75450000    60000 C:\Windows\syswow64\IMM32.dll
+//            767C0000    CC000 C:\Windows\syswow64\MSCTF.dll
+//            74760000    32000 C:\Windows\system32\WINMM.dll
+//            74700000    51000 C:\Windows\system32\WINSPOOL.DRV
+//            72E10000    3C000 C:\Windows\system32\MSWSOCK.dll
+//            74B30000    11000 C:\Windows\system32\NETAPI32.dll
+//            74B20000     9000 C:\Windows\system32\netutils.dll
+//            74B00000    19000 C:\Windows\system32\srvcli.dll
+//            74AF0000     F000 C:\Windows\system32\wkscli.dll
+//            72E50000    A3000 C:\Windows\WinSxS\x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.30729.6161_none_50934f2ebcb7eb57\MSVCR90.dll
+//            1B090000    26000 D:\blah\blah\runtime.dll
+//
+// Process modules enumerated.
+// Debug library initialized ...
+DBGHELP: ntdll - public symbols  
+         d:\vpdev\websymbols\wntdll.pdb\B193CACD9AB340E7BF3434EA1ABBE0482\wntdll.pdb
+
+*- - - - - - - - - - Start of data for heap @ 2E60000 - - - - - - - - - -
+
+REQUESTED bytes + OVERHEAD at ADDRESS by BackTraceID
+     STACK if not already dumped.
+
+*- - - - - - - - - - Heap 2E60000 Hogs - - - - - - - - - -
+
+64 bytes + 1C at 2E9FA20 by BackTrace18D0A0D0
+	776CDD82
+	7768EC66
+	7768EE70
+	7768EF71
+	7768C3F9
+	7768C525
+	75A92288
+	75991E23
+	60AC5247
+	60AC215A
+	650C3799
+	642ED514
+	642FD7AF
+	643194D6
+	6431CAB7
+	6431CA0D
+	40C8EE
+	449DB8
+	60AD870C
+	60AE6322
+	64FDECDB
+	642B3FFE
+	642B4205
+	642B52CF
+	64317B09
+	6432355B
+	6431F99B
+	60AD870C
+	60AE6322
+	658F5088
+	658F504B
+	60AD870C
+
+
+68 bytes + 18 at 2E9FAA0 by BackTrace1AF06BFC
+	776CDD82
+	7768EC66
+	7768F16F
+	7768EF71
+	7768E2D0
+	7768EA60
+	7768EAD8
+	7768E9D3
+	7768D6FF
+	7768C525
+	75A92288
+	75991E23
+	60AC5247
+	60AC215A
+	650C3799
+	650C508B
+	658E2AFF
+	658E4BB5
+	658E5FD6
+	658E6CC6
+	658E75D8
+	658E7C66
+	658E7F53
+	642F59E6
+	642FDDE1
+	643194D6
+	6431CAB7
+	6431CA0D
+	40C8EE
+	449DB8
+	60AD870C
+	60AE6322
+
+62 bytes + 1E at 2E9FB20 by BackTrace1AF06BFC
+66 bytes + 1A at 2E9FBA0 by BackTrace1AF07D3C
+66 bytes + 1A at 2E9FC20 by BackTrace1AF07D3C
+68 bytes + 18 at 2E9FCA0 by BackTrace1AF07D3C
+68 bytes + 18 at 2E9FD20 by BackTrace1AF083B4
+68 bytes + 18 at 2E9FDA0 by BackTrace1AF083B4
+
+64 bytes + 1C at 2E9FE20 by BackTrace1AF0B99C
+	776CDD82
+	7768EC66
+	7768F16F
+	7768EF71
+	7768E2D0
+	7768EA60
+	7768EAD8
+	7768E9D3
+	77690FFF
+	7768EA60
+	7768EAD8
+	7768E9D3
+	77690FFF
+	7768EA60
+	7768EAD8
+	7768E9D3
+	77690FFF
+	7768EA60
+	7768EAD8
+	7768E9D3
+	7768D6FF
+	7768C525
+	75A92288
+	75991E23
+	60AC5247
+	60AC215A
+	650C3799
+	650C508B
+	658E2AFF
+	658E4BB5
+	658E5FD6
+	658E6CC6
+
+*- - - - - - - - - - End of data for heap @ 2E60000 - - - - - - - - - -
+
+*- - - - - - - - - - Start of data for heap @ 1D890000 - - - - - - - - - -
+
+REQUESTED bytes + OVERHEAD at ADDRESS by BackTraceID
+     STACK if not already dumped.
+
+*- - - - - - - - - - Heap 1D890000 Hogs - - - - - - - - - -
+
+
+*- - - - - - - - - - End of data for heap @ 1D890000 - - - - - - - - - -
