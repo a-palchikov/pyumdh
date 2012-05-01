@@ -150,12 +150,12 @@ class Backtrace(object):
                 # now, compute the differences on the allocation level
                 commontraces = otherheapset.intersection(heap)
                 for trace in commontraces:
+                    alloc = otherheap.get(trace)
                     a0 = frozenset(heap.get(trace).allocs)
                     a1 = frozenset(otherheap.get(trace).allocs)
                     adiff = list(a1 - a0)
-                    if adiff:
-                        #pdb.set_trace()
-                        alloc = otherheap.get(trace)
+                    # skip over this trace if the grep is negative
+                    if adiff and grepfn((None, alloc)):
                         allocdiff = self.allocation(stack=alloc.stack, \
                                 allocs=adiff)
                         diffheap.setdefault(trace, allocdiff)
@@ -188,7 +188,6 @@ class Backtrace(object):
         while line:
             m = self._allocstats_re_.search(line)
             if m:
-                #pdb.set_trace()
                 requested, overhead, addr, traceid = m.group(1, 2, 3, 4)
                 item = allocs.setdefault(traceid, None)
                 # parse allocation
