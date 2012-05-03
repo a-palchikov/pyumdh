@@ -266,7 +266,6 @@ class Backtrace(object):
 
             data = fileobject
             if data.read(len(self.magic)) != self.magic:
-                if close: fileobject.close()
                 raise ValueError('not binary trace file')
             dword = struct.calcsize('L')
             # modules
