@@ -28,7 +28,7 @@ class BacktraceParseTest(TestCase):
         self._trace.save(r'test.tmp')
         dummy = Backtrace()
         dummy.load('test.tmp')
-        self.assertEquals(len(dummy._modules), len(dummy._modules))
+        self.assertEquals(len(dummy._modules), len(self._trace._modules))
         self.assertTrue(0x2E60000 in dummy._heaps)
         self.assertEquals(len(dummy._heaps[0x2E60000]), \
                             len(self._trace._heaps[0x2E60000]))
