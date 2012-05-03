@@ -31,6 +31,11 @@ DBG_BIN_PATHS = []
 # the script's bin path
 WORK_DIR = 'data'
 
+# This is an optimization that will compress likely duplicate traces into a
+# single trace
+# FIXME combine all allocations so no information is lost
+REMOVE_DUPLICATES = True
+
 # Stack frames with these patterns matched will be skipped from diff/dump
 # Note, the setting is crrent effective only in backtrace.py when it's
 # used as main program

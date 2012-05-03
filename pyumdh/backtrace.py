@@ -1,15 +1,23 @@
+
 import re
-import pdb
-from collections import namedtuple
-#from itertools import ifilter
-from pyumdh.symprovider import format_symbol_module
+import operator
+import difflib
+import math
 import os
 import sys
+import struct
+import io
+# FIXME factor multiprocessing into a separate file
+from multiprocessing import Pool, cpu_count
+from collections import namedtuple
+from itertools import combinations, groupby
+from pyumdh.symprovider import format_symbol_module
 import pyumdh.config as config
 try:
     import cPickle as pickle
 except ImportError:
     import pickle
+import pdb
 
 
 # parsing helpers
@@ -41,7 +49,6 @@ def _parse_stack(f):
         line = f.readline()
     return addrs
 
-
 class Backtrace(object):
     """Process memory snapshot.
 
@@ -58,12 +65,18 @@ class Backtrace(object):
     sample = namedtuple('sample', 'requested overhead address')
     allocation = namedtuple('allocation', 'stack allocs')
     module = namedtuple('module', 'BaseOfImage SizeOfImage ModuleName')
+    magic = 'hdmuyp'
 
     def __init__(self, datafile=None):
         """Constructs a Backtrace by parsing the specified file"""
         # heaps is a dict of dicts each representing an individual allocation
         self._heaps = {}
+        # top-level allocations dict (this is where _all_ allocations
+        # irregardless of heap they belong to are stored)
+        self._allocs = {}
         self._modules = {}
+        # unique traces
+        self._uniqueallocs = set()
         if datafile:
             if isinstance(datafile, basestring):
                 with open(datafile, 'r') as f:
@@ -112,13 +125,17 @@ class Backtrace(object):
         self._print('Allocations:', fileobject=fileobject)
         for handle, heap in heaps:
             self._print('Heap @ 0x%X' % handle, fileobject=fileobject)
-            for traceid, alloc in filter(grepfn, heap.iteritems()):
-                self._print('Traceid: 0x%x' % int(traceid, 16), fileobject=fileobject)
+            if self._uniqueallocs:
+                iterable = filter(lambda i: i[0] in self._uniqueallocs, \
+                                    heap.iteritems())
+            else:
+                iterable = heap.iteritems()
+            for traceid, alloc in filter(grepfn, iterable):
+                self._print('Traceid: 0x%x' % traceid, fileobject=fileobject)
                 self._print('Allocations: [%s]' % ','.join(map(hex, \
                     [addr for _,_,addr in alloc.allocs])), fileobject)
                 self._dump_stack(alloc.stack, symbols=symbols, \
                         fileobject=fileobject)
-
 
     def diff_with(self, backtrace, grepfn=None):
         """Compute a diff to backtrace and return a new instance of
@@ -139,14 +156,18 @@ class Backtrace(object):
             # work for each overlapping heap
             otherheap = backtrace._heaps.get(handle)
             if otherheap:
-                otherheapset = frozenset(otherheap)
+                otherheapset = frozenset(otherheap.iterkeys())
                 # filter all traces not present in original heap
-                difftraces = otherheapset.difference(heap)
+                difftraces = otherheapset.difference(heap.iterkeys())
                 # FIXME maybe treat dicts and iterables alike as values for
                 # self._heaps???
-                diffallocs = filter(grepfn, filter(diff_filter(difftraces), \
-                                    otherheap.iteritems()))
-                diffheap = diff._heaps.setdefault(handle, dict(diffallocs))
+                diffdct = {t: otherheap[t] for t in difftraces}
+                diffallocs = dict(filter(grepfn, diffdct.iteritems()))
+                if not diffallocs:
+                    # do not persist an empty heap
+                    continue
+                diffheap = diff._heaps.setdefault(handle, diffallocs)
+                diff._allocs.update(diffallocs)
                 # now, compute the differences on the allocation level
                 commontraces = otherheapset.intersection(heap)
                 for trace in commontraces:
@@ -156,21 +177,131 @@ class Backtrace(object):
                     adiff = list(a1 - a0)
                     # skip over this trace if the grep is negative
                     if adiff and grepfn((None, alloc)):
-                        allocdiff = self.allocation(stack=alloc.stack, \
-                                allocs=adiff)
-                        diffheap.setdefault(trace, allocdiff)
+                        diffalloc = self.allocation(stack=alloc.stack, \
+                                                    allocs=adiff)
+                        diffheap.setdefault(trace, diffalloc)
+                        diff._allocs.update({trace: diffalloc})
         return diff
 
+    def compress_duplicates(self):
+        # FIXME maybe return a copy of Backtrace with duplicates removed
+        for heap in self._heaps.itervalues():
+            # compute duplicates
+            duplicates = []
+            if len(heap) > 0:
+                for pair in combinations(heap.iterkeys(), 2):
+                    seq1 = heap[pair[0]]
+                    seq2 = heap[pair[1]]
+                    foo = difflib.SequenceMatcher(None, seq1.stack, \
+                                            seq2.stack, autojunk=False)
+                    if foo.quick_ratio() > 0.88:
+                        # likely duplicates
+                        # naive stacks diffing:
+                        # compute longest matc
+                        #   > make sure it starts off index 0
+                        #   > tolerate up to 30% difference off stacks' ends
+                        i, _, k = foo.find_longest_match(0, len(seq1.stack), \
+                                                            0, len(seq2.stack))
+                        if i == 0 and k >= int(math.floor(len(seq1) * 0.7)):
+                            duplicates.append(pair)
+            if duplicates:
+                seen = set() # traces we've seen so far
+                for key, group in groupby(duplicates, \
+                                            key=operator.itemgetter(0)):
+                    #if key not in seen:
+                    #    self._uniqueallocs.update({key: self._allocs.get(key)})
+
+                    # update seen set with items that need not be repeated in
+                    # uniqueallocs
+                    seen.update(map(operator.itemgetter(1), group))
+                    # FIXME aggregate allocs from each trace in group
+                    # to uniqueallocs
+                # now, take all allocations that weren't flagged as duplicates
+                # into self._uniqueallocs
+                self._uniqueallocs = set(set(self._allocs.keys()) - seen)
+                #self._uniqueallocs.update({key: self._allocs[key] for key in \
+                #    self._allocs.iterkeys() if key not in seen})
+
     def save(self, fileobject):
-        # FIXME im broken
-        # persist in redis?
-        close = False
-        if isinstance(fileobject, basestring):
-            close = True
-            fileobject = open(fileobject, 'wb')
-        pickle.dump(self, fileobject)
-        if close:
-            fileobject.close()
+        """Saves a Backtrace to fileobject in binary form"""
+        try:
+            close = False
+            if isinstance(fileobject, basestring):
+                close = True
+                fileobject = io.open(fileobject, 'wb')
+
+            fileobject.write(self.magic)
+            # modules
+            fileobject.write(struct.pack('L', len(self._modules)))
+            for m in self._modules.itervalues():
+                fileobject.write(struct.pack('LLL%ds' % len(m.ModuleName), \
+                                    m.BaseOfImage, m.SizeOfImage, \
+                                    len(m.ModuleName), m.ModuleName))
+            # heaps
+            fileobject.write(struct.pack('L', len(self._heaps)))
+            for handle, heap in self._heaps.iteritems():
+                fileobject.write(struct.pack('LL', handle, len(heap)))
+                for traceid, allocation in heap.iteritems():
+                    fileobject.write(struct.pack('LLL', traceid, \
+                            len(allocation.stack), len(allocation.allocs)))
+                    # allocation
+                    for addr in allocation.stack:
+                        fileobject.write(struct.pack('L', addr))
+                    for sample in allocation.allocs:
+                        fileobject.write(struct.pack('LLL', sample.requested, \
+                            sample.overhead, sample.address))
+        finally:
+            if close:
+                fileobject.close()
+
+    def load(self, fileobject):
+        """Loads a Backtrace from a binary representation.
+        See self.save() for the persisting counterpart.
+        """
+        try:
+            close = False
+            if isinstance(fileobject, basestring):
+                close = True
+                fileobject = io.open(fileobject, 'rb')
+
+            data = fileobject
+            if data.read(len(self.magic)) != self.magic:
+                if close: fileobject.close()
+                raise ValueError('not binary trace file')
+            dword = struct.calcsize('L')
+            # modules
+            nummodules = struct.unpack_from('L', data.read(dword))[0]
+            for i in range(nummodules):
+                base, size, modulenamelen = struct.unpack_from('LLL', \
+                        data.read(dword*3))
+                strfmt = '%ds' % modulenamelen
+                strlen = struct.calcsize(strfmt)
+                modulename = struct.unpack_from(strfmt, data.read(strlen))[0]
+                self._modules.setdefault(os.path.basename(modulename), \
+                                        self.module(base, size, modulename))
+            # heaps
+            numheaps = struct.unpack_from('L', data.read(dword))[0]
+            for i in range(numheaps):
+                handle, numallocs = struct.unpack_from('LL', data.read(dword*2))
+                heap = {}
+                for j in range(0, numallocs):
+                    traceid, stacklen, allocslen = struct.unpack_from('LLL', \
+                            data.read(dword*3))
+                    # allocation
+                    stack = []
+                    for k in range(stacklen):
+                        stack.append(struct.unpack_from('L', data.read(dword))[0])
+                    allocs = []
+                    for k in range(allocslen):
+                        allocs.append(self.sample(*struct.unpack_from('LLL', \
+                            data.read(dword*3))))
+                    allocation = self.allocation(stack=stack, allocs=allocs)
+                    heap.setdefault(traceid, allocation)
+                    self._allocs.setdefault(traceid, allocation)
+                self._heaps.setdefault(handle, heap)
+        finally:
+            if close:
+                fileobject.close()
 
     def _parse(self, f):
         """Parse the data"""
@@ -179,7 +310,9 @@ class Backtrace(object):
             if line.startswith('*- - - - - - - - - - Heap'):
                 heaphandle = \
                         int(self._heaphandle_re_.search(line).group(1), 16)
-                self._heaps.update({heaphandle: self._parse_heap(f)})
+                heapallocs = self._parse_heap(f)
+                self._allocs.update(heapallocs)
+                self._heaps.update({heaphandle: heapallocs})
             line = _next_line(f)
 
     def _parse_heap(self, f):
@@ -189,6 +322,7 @@ class Backtrace(object):
             m = self._allocstats_re_.search(line)
             if m:
                 requested, overhead, addr, traceid = m.group(1, 2, 3, 4)
+                traceid = int(traceid, 16)
                 item = allocs.setdefault(traceid, None)
                 # parse allocation
                 stack = _parse_stack(f)
@@ -244,6 +378,45 @@ class Backtrace(object):
         fileobject.write(message + '\n')
 
 
+def binary_backtrace_path(filepath):
+    binfn = os.path.basename(filepath)
+    binfn = '%s.bin' % binfn[:-4]
+    return os.path.abspath(os.path.join(os.path.dirname(filepath), binfn))
+
+def generate_binary_backtrace(datafile):
+    binpath = binary_backtrace_path(datafile)
+    if not os.path.exists(binpath):
+        trace = Backtrace(datafile)
+        trace.save(binpath)
+
+def load_binary_backtrace(datafile):
+    trace = Backtrace()
+    trace.load(binary_backtrace_path(datafile))
+    return trace
+
+def is_backtrace_binary(datafile):
+    try:
+        if isinstance(datafile, basestring):
+            close = True
+            datafile = io.open(datafile, 'rb')
+        if datafile.read(len(Backtrace.magic)) != magic:
+            return False
+        return True
+    finally:
+        if close:
+            datafile.close()
+
+def load_backtraces(tracefiles):
+    """Helper to load trace logs from original or binary store.
+    It assumes that (trace) binary representation files end with `.bin'
+    """
+    p = Pool(len(tracefiles) if len(tracefiles) < cpu_count() else None)
+    p.map(generate_binary_backtrace, tracefiles)
+    p.close()
+    p.join()
+    return map(load_binary_backtrace, tracefiles)
+
+
 if __name__ == '__main__':
     import sys
     # Use: backtrace[.py] datafile1 datafile2 ... datafilen
@@ -253,16 +426,23 @@ if __name__ == '__main__':
         sys.exit(1)
     from symprovider import symbols
     from filters import filter_on_foreign_module, grep_filter
-    traces = map(Backtrace, sys.argv[1:])
+    #traces = map(load_backtrace, sys.argv[1:])
+    traces = load_backtraces(sys.argv[1:])
+    pdb.set_trace()
     with symbols(bin_path=';'.join(config.DBG_BIN_PATHS), \
                     sym_path=';'.join(config.DBG_SYMBOL_PATHS)) as sym:
         patterns = config.TRUSTED_PATTERNS if 'TRUSTED_PATTERNS' in \
                             dir(config) else []
         modules = config.TRUSTED_MODULES if 'TRUSTED_MODULES' in \
                             dir(config) else []
-        grepfn = filter_on_foreign_module(traces[-1], symbols=sym, \
-            trustedmodules=modules, trustedpatterns=patterns)
+        grepfn = filter_on_foreign_module( \
+                    traces[-1], symbols=sym, \
+                    trustedmodules=modules, \
+                    trustedpatterns=patterns)
         # compute diff for the last two data files
         diff = traces[-2].diff_with(traces[-1], grepfn=grepfn)
+        if config.REMOVE_DUPLICATES:
+            diff.compress_duplicates()
         pdb.set_trace()
-        diff.dump_allocs(symbols=sym, handle=0x5B90000)
+        diff.dump_allocs(symbols=sym, handle=0x32000000)
+

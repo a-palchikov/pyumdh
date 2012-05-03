@@ -127,7 +127,7 @@ class SymbolProvider(object):
                         a symbol's boundary)
         returns (symbol_name, disposition, module_name, symbol_repr)
         """
-        assert not self._shutdown, 'symbol provder already shut down'
+        assert not self._shutdown, 'symbol provider already shut down'
         # probe the address for the ranges we already know, if None found, load the module
         # and its symbol table
         module = moduleregistry.map_to_module(addr)

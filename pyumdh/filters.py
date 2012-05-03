@@ -38,6 +38,8 @@ class ForeignModule(object):
                     trustedpatterns=None, allocatorpatterns=None):
         self._stockallocpatterns = [re.compile(r'msvcr(:?[t]|\d+)!_?(:?[mc]|re)alloc', \
                                     flags=re.IGNORECASE), \
+                                re.compile(r'msvcr(:?[t]|\d+)!operator new', \
+                                    flags=re.IGNORECASE), \
                                 re.compile(r'ntdll!rtl(re)?allocateheap', \
                                     flags=re.IGNORECASE), \
                                 re.compile(r'kernelbase!\w+alloc', \
