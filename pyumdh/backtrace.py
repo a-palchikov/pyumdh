@@ -7,16 +7,9 @@ import os
 import sys
 import struct
 import io
-# FIXME factor multiprocessing into a separate file
-from multiprocessing import Pool, cpu_count
 from collections import namedtuple
 from itertools import combinations, groupby
 from pyumdh.symprovider import format_symbol_module
-import pyumdh.config as config
-try:
-    import cPickle as pickle
-except ImportError:
-    import pickle
 import pdb
 
 
@@ -196,10 +189,8 @@ class Backtrace(object):
                                             seq2.stack, autojunk=False)
                     if foo.quick_ratio() > 0.88:
                         # likely duplicates
-                        # naive stacks diffing:
-                        # compute longest matc
-                        #   > make sure it starts off index 0
-                        #   > tolerate up to 30% difference off stacks' ends
+                        # compute longest match and make sure it's as long as
+                        # 70% of the stack
                         i, _, k = foo.find_longest_match(0, len(seq1.stack), \
                                                             0, len(seq2.stack))
                         if i == 0 and k >= int(math.floor(len(seq1) * 0.7)):
@@ -375,73 +366,4 @@ class Backtrace(object):
         if not fileobject:
             fileobject = sys.stdout
         fileobject.write(message + '\n')
-
-
-def binary_backtrace_path(filepath):
-    binfn = os.path.basename(filepath)
-    binfn = '%s.bin' % binfn[:-4]
-    return os.path.abspath(os.path.join(os.path.dirname(filepath), binfn))
-
-def generate_binary_backtrace(datafile):
-    binpath = binary_backtrace_path(datafile)
-    if not os.path.exists(binpath):
-        trace = Backtrace(datafile)
-        trace.save(binpath)
-
-def load_binary_backtrace(datafile):
-    trace = Backtrace()
-    trace.load(binary_backtrace_path(datafile))
-    return trace
-
-def is_backtrace_binary(datafile):
-    try:
-        if isinstance(datafile, basestring):
-            close = True
-            datafile = io.open(datafile, 'rb')
-        if datafile.read(len(Backtrace.magic)) != magic:
-            return False
-        return True
-    finally:
-        if close:
-            datafile.close()
-
-def load_backtraces(tracefiles):
-    """Helper to load trace logs from original or binary store.
-    It assumes that (trace) binary representation files end with `.bin'
-    """
-    p = Pool(len(tracefiles) if len(tracefiles) < cpu_count() else None)
-    p.map(generate_binary_backtrace, tracefiles)
-    p.close()
-    p.join()
-    return map(load_binary_backtrace, tracefiles)
-
-
-if __name__ == '__main__':
-    import sys
-    # Use: backtrace[.py] datafile1 datafile2 ... datafilen
-    if len(sys.argv) < 3:
-        print 'backtrace[.py] datafile1 datafile2 .. datafilen'
-        print '\tat least two data files are required for analysis'
-        sys.exit(1)
-    from symprovider import symbols
-    from filters import filter_on_foreign_module, grep_filter
-    #traces = map(load_backtrace, sys.argv[1:])
-    traces = load_backtraces(sys.argv[1:])
-    pdb.set_trace()
-    with symbols(bin_path=';'.join(config.DBG_BIN_PATHS), \
-                    sym_path=';'.join(config.DBG_SYMBOL_PATHS)) as sym:
-        patterns = config.TRUSTED_PATTERNS if 'TRUSTED_PATTERNS' in \
-                            dir(config) else []
-        modules = config.TRUSTED_MODULES if 'TRUSTED_MODULES' in \
-                            dir(config) else []
-        grepfn = filter_on_foreign_module( \
-                    traces[-1], symbols=sym, \
-                    trustedmodules=modules, \
-                    trustedpatterns=patterns)
-        # compute diff for the last two data files
-        diff = traces[-2].diff_with(traces[-1], grepfn=grepfn)
-        if config.REMOVE_DUPLICATES:
-            diff.compress_duplicates()
-        pdb.set_trace()
-        diff.dump_allocs(symbols=sym, handle=0x32000000)
 
