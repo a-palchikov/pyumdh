@@ -41,10 +41,12 @@ def _load_backtraces(tracefiles):
     """Helper to load trace logs from original or binary store.
     It assumes that (trace) binary representation files end with `.bin'
     """
+    """
     p = Pool(len(tracefiles) if len(tracefiles) < cpu_count() else None)
     p.map(_generate_binary_backtrace, tracefiles)
     p.close()
     p.join()
+    """
     return map(_load_binary_backtrace, tracefiles)
 
 
@@ -65,11 +67,13 @@ if __name__ == '__main__':
     parser.add_option('--save-binary', dest='savebin', default=False, \
             action='store_true', help='specify that results be saved ' \
             'in binary form (defaults to %default)')
-    opts, args = parser.parse_args()
 
-    if len(opts.logs) < 2:
+    if not sys.argv[1:]:
         parser.print_help()
         sys.exit(1)
+
+    (opts, args) = parser.parse_args()
+    sys.argv[:] = args
 
     from symprovider import symbols
     from filters import filter_on_foreign_module, grep_filter

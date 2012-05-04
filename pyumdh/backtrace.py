@@ -8,7 +8,7 @@ import sys
 import struct
 import io
 from collections import namedtuple
-from itertools import combinations, groupby
+from itertools import combinations, groupby, ifilter, chain
 from pyumdh.symprovider import format_symbol_module
 import pdb
 
@@ -69,7 +69,7 @@ class Backtrace(object):
         self._allocs = {}
         self._modules = {}
         # unique traces
-        self._uniqueallocs = set()
+        self._uniqueallocs = {}
         if datafile:
             if isinstance(datafile, basestring):
                 with open(datafile, 'r') as f:
@@ -119,14 +119,17 @@ class Backtrace(object):
         for handle, heap in heaps:
             self._print('Heap @ 0x%X' % handle, fileobject=fileobject)
             if self._uniqueallocs:
-                iterable = filter(lambda i: i[0] in self._uniqueallocs, \
+                iterable = ifilter(lambda i: i[0] in self._uniqueallocs, \
                                     heap.iteritems())
             else:
                 iterable = heap.iteritems()
-            for traceid, alloc in filter(grepfn, iterable):
+            for traceid, alloc in ifilter(grepfn, iterable):
+                mergeallocs = self._uniqueallocs.get(traceid) or []
                 self._print('Traceid: 0x%x' % traceid, fileobject=fileobject)
-                self._print('Allocations: [%s]' % ','.join(map(hex, \
-                    [addr for _,_,addr in alloc.allocs])), fileobject)
+                self._print('Memory: [%s]' % ','.join(map(hex, \
+                    [addr for _,_,addr in chain(alloc.allocs, \
+                                                mergeallocs)])), \
+                            fileobject)
                 self._dump_stack(alloc.stack, symbols=symbols, \
                         fileobject=fileobject)
 
@@ -197,6 +200,7 @@ class Backtrace(object):
                             duplicates.append(pair)
             if duplicates:
                 seen = set() # traces we've seen so far
+                mergeallocs = {}
                 for key, group in groupby(duplicates, \
                                             key=operator.itemgetter(0)):
                     #if key not in seen:
@@ -204,12 +208,23 @@ class Backtrace(object):
 
                     # update seen set with items that need not be repeated in
                     # uniqueallocs
-                    seen.update(map(operator.itemgetter(1), group))
-                    # FIXME aggregate allocs from each trace in group
-                    # to uniqueallocs
-                # now, take all allocations that weren't flagged as duplicates
-                # into self._uniqueallocs
-                self._uniqueallocs = set(set(self._allocs.keys()) - seen)
+                    tracelist = map(operator.itemgetter(1), group)
+                    seen.update(tracelist)
+                    if key not in seen:
+                        # associate each trace that makes it into uniqueallocs
+                        # with the list of its duplicate so that we can merge
+                        # allocations later
+                        mergeallocs[key] = tracelist
+                # now, accommodate all allocations that weren't flagged as duplicates
+                # into self._uniqueallocs paired with allocations from duplicates
+                uniqueallocs = set(set(self._allocs.keys()) - seen)
+                for traceid in uniqueallocs:
+                    allocs = []
+                    mergegroup = mergeallocs.get(traceid)
+                    if mergegroup:
+                        for tid in mergegroup:
+                            allocs.extend(self._allocs[tid].allocs)
+                    self._uniqueallocs[traceid] = allocs
                 #self._uniqueallocs.update({key: self._allocs[key] for key in \
                 #    self._allocs.iterkeys() if key not in seen})
 
@@ -232,13 +247,20 @@ class Backtrace(object):
             fileobject.write(struct.pack('L', len(self._heaps)))
             for handle, heap in self._heaps.iteritems():
                 fileobject.write(struct.pack('LL', handle, len(heap)))
-                for traceid, allocation in heap.iteritems():
+                if self._uniqueallocs:
+                    iterable = ifilter(lambda i: i[0] in self._uniqueallocs, \
+                                        heap.iteritems())
+                else:
+                    iterable = heap.iteritems()
+                for traceid, allocation in iterable:
+                    mergeallocs = self._uniqueallocs.get(traceid) or []
                     fileobject.write(struct.pack('LLL', traceid, \
-                            len(allocation.stack), len(allocation.allocs)))
+                            len(allocation.stack), \
+                            len(allocation.allocs) + len(mergeallocs)))
                     # allocation
                     for addr in allocation.stack:
                         fileobject.write(struct.pack('L', addr))
-                    for sample in allocation.allocs:
+                    for sample in chain(allocation.allocs, mergeallocs):
                         fileobject.write(struct.pack('LLL', sample.requested, \
                             sample.overhead, sample.address))
         finally:

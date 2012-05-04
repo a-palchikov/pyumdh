@@ -2,7 +2,12 @@
 import py2exe
 import sys
 from distutils.core import setup
+from glob import glob
 
+datafiles = [('x64', glob('pyumdh\\x64\\*.dll')), \
+            ('x86', glob('pyumdh\\x86\\*.dll')), \
+            ('', glob('pyumdh\\config.py')) \
+            ]
 options = {'py2exe': \
 		{
 			'excludes': ['Tkinter', 'tcl'],
@@ -12,7 +17,8 @@ options = {'py2exe': \
 }
 setup(
 	name = 'differ',
-	console=[r'pyumdh\differ.py'],
+	console = [r'pyumdh\differ.py'],
+    data_files = datafiles,
 	version = '0.0.1',
 	description = 'memory snapshot differ',
 	author = 'deemok@gmail.com',
