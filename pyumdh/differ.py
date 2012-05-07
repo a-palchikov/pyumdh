@@ -3,11 +3,14 @@
 from multiprocessing import Pool, cpu_count, freeze_support
 import pyumdh.config as config
 from pyumdh.backtrace import Backtrace
+from pyumdh.utils import SymProxy
 from optparse import OptionParser
+import operator
 import re
 import os
 import sys
 import pdb
+
 
 def _binary_backtrace_path(filepath):
     binfn = os.path.basename(filepath)
@@ -49,6 +52,9 @@ def _load_backtraces(tracefiles):
     """
     return map(_load_binary_backtrace, tracefiles)
 
+# FIXME tbd
+_USAGE = """
+"""
 
 if __name__ == '__main__':
     freeze_support()
@@ -67,6 +73,9 @@ if __name__ == '__main__':
     parser.add_option('--save-binary', dest='savebin', default=False, \
             action='store_true', help='specify that results be saved ' \
             'in binary form (defaults to %default)')
+    parser.add_option('--sym-cache', dest='symcache', default=None, \
+            help='specify file to use for symbol caching; this will ' \
+            'significantly speed symbol lookups')
 
     if not sys.argv[1:]:
         parser.print_help()
@@ -77,9 +86,10 @@ if __name__ == '__main__':
 
     from symprovider import symbols
     from filters import filter_on_foreign_module, grep_filter
-    traces = _load_backtraces(opts.logs)
+    traces = _load_backtraces(opts.logs or args)
     with symbols(bin_path=';'.join(config.DBG_BIN_PATHS), \
-                    sym_path=';'.join(config.DBG_SYMBOL_PATHS)) as sym:
+                    sym_path=';'.join(config.DBG_SYMBOL_PATHS)) as _sym:
+        sym = SymProxy(_sym, opts.symcache)
         patterns = config.TRUSTED_PATTERNS if 'TRUSTED_PATTERNS' in \
                             dir(config) else []
         for p in opts.patterns:
@@ -104,4 +114,7 @@ if __name__ == '__main__':
                 fileobject.close()
         else:
             diff.save(opts.outfile)
+        if opts.symcache and not os.path.exists(opts.symcache):
+            sym.save()
+        #sym.dump_stats()
 

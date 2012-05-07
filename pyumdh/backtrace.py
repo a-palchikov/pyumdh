@@ -10,6 +10,13 @@ import io
 from collections import namedtuple
 from itertools import combinations, groupby, ifilter, chain
 from pyumdh.symprovider import format_symbol_module
+import pyumdh.config as config
+from pyumdh.symprovider import symbols
+from pyumdh.utils import SymProxy, file_open
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
 import pdb
 
 
@@ -231,10 +238,7 @@ class Backtrace(object):
     def save(self, fileobject):
         """Saves a Backtrace to fileobject in binary form"""
         try:
-            close = False
-            if isinstance(fileobject, basestring):
-                close = True
-                fileobject = io.open(fileobject, 'wb')
+            fileobject, close = file_open(fileobject, 'wb')
 
             fileobject.write(self.magic)
             # modules
@@ -246,23 +250,29 @@ class Backtrace(object):
             # heaps
             fileobject.write(struct.pack('L', len(self._heaps)))
             for handle, heap in self._heaps.iteritems():
-                fileobject.write(struct.pack('LL', handle, len(heap)))
                 if self._uniqueallocs:
                     iterable = ifilter(lambda i: i[0] in self._uniqueallocs, \
                                         heap.iteritems())
+                    numallocs = len(self._uniqueallocs)
                 else:
                     iterable = heap.iteritems()
+                    numallocs = len(heap)
+                fileobject.write(struct.pack('LL', handle, numallocs))
                 for traceid, allocation in iterable:
                     mergeallocs = self._uniqueallocs.get(traceid) or []
+                    numaddrs = len(allocation.allocs) + len(mergeallocs)
                     fileobject.write(struct.pack('LLL', traceid, \
                             len(allocation.stack), \
-                            len(allocation.allocs) + len(mergeallocs)))
+                            numaddrs))
                     # allocation
                     for addr in allocation.stack:
                         fileobject.write(struct.pack('L', addr))
-                    for sample in chain(allocation.allocs, mergeallocs):
+                    for m, sample in enumerate(chain(allocation.allocs, \
+                                                    mergeallocs)):
                         fileobject.write(struct.pack('LLL', sample.requested, \
                             sample.overhead, sample.address))
+                    #else:
+                    #    assert(m+1 == numallocs)
         finally:
             if close:
                 fileobject.close()
@@ -272,18 +282,16 @@ class Backtrace(object):
         See self.save() for the persisting counterpart.
         """
         try:
-            close = False
-            if isinstance(fileobject, basestring):
-                close = True
-                fileobject = io.open(fileobject, 'rb')
+            fileobject, close = file_open(fileobject, 'rb')
 
             data = fileobject
+            #data = StringIO(fileobject.read())
             if data.read(len(self.magic)) != self.magic:
                 raise ValueError('not binary trace file')
             dword = struct.calcsize('L')
             # modules
             nummodules = struct.unpack_from('L', data.read(dword))[0]
-            for i in range(nummodules):
+            for i in xrange(nummodules):
                 base, size, modulenamelen = struct.unpack_from('LLL', \
                         data.read(dword*3))
                 strfmt = '%ds' % modulenamelen
@@ -293,18 +301,18 @@ class Backtrace(object):
                                         self.module(base, size, modulename))
             # heaps
             numheaps = struct.unpack_from('L', data.read(dword))[0]
-            for i in range(numheaps):
+            for i in xrange(numheaps):
                 handle, numallocs = struct.unpack_from('LL', data.read(dword*2))
                 heap = {}
-                for j in range(0, numallocs):
+                for j in xrange(numallocs):
                     traceid, stacklen, allocslen = struct.unpack_from('LLL', \
                             data.read(dword*3))
                     # allocation
                     stack = []
-                    for k in range(stacklen):
+                    for k in xrange(stacklen):
                         stack.append(struct.unpack_from('L', data.read(dword))[0])
                     allocs = []
-                    for k in range(allocslen):
+                    for k in xrange(allocslen):
                         allocs.append(self.sample(*struct.unpack_from('LLL', \
                             data.read(dword*3))))
                     allocation = self.allocation(stack=stack, allocs=allocs)
@@ -388,4 +396,17 @@ class Backtrace(object):
         if not fileobject:
             fileobject = sys.stdout
         fileobject.write(message + '\n')
+
+
+if __name__ == '__main__':
+    if not sys.argv[1:]:
+        print 'Syntax: backtrace[.py] datafile [sym-cache]'
+        sys.exit(1)
+    trace = Backtrace()
+    trace.load(sys.argv[1])
+    with symbols(bin_path=';'.join(config.DBG_BIN_PATHS), \
+                    sym_path=';'.join(config.DBG_SYMBOL_PATHS)) as _sym:
+        symcache = sys.argv[2:]
+        sym = SymProxy(_sym, symcache[0]) if symcache else _sym
+        trace.dump_allocs(symbols=sym)
 
