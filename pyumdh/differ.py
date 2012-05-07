@@ -44,12 +44,10 @@ def _load_backtraces(tracefiles):
     """Helper to load trace logs from original or binary store.
     It assumes that (trace) binary representation files end with `.bin'
     """
-    """
     p = Pool(len(tracefiles) if len(tracefiles) < cpu_count() else None)
     p.map(_generate_binary_backtrace, tracefiles)
     p.close()
     p.join()
-    """
     return map(_load_binary_backtrace, tracefiles)
 
 # FIXME tbd
