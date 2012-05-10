@@ -1,3 +1,5 @@
+# vim:ts=4:sw=4:expandtab
+"""Implements Backtrace - class for reading and processing memory snapshots"""
 
 import re
 import operator
@@ -12,7 +14,7 @@ from itertools import combinations, groupby, ifilter, chain
 from pyumdh.symprovider import format_symbol_module
 import pyumdh.config as config
 from pyumdh.symprovider import symbols
-from pyumdh.utils import SymProxy, file_open
+from pyumdh.utils import SymProxy, file_open, fmt_size
 try:
     from cStringIO import StringIO
 except ImportError:
@@ -32,22 +34,38 @@ def _next_line(f):
         break
     return line
 
+
 def _parse_stack(f):
-    """Parse stack as a list of addresses"""
-    addrs = []
+    """Parse stack as a list of addresses.
+    Handles aliases stacks by combining them into a separate list.
+    Returns (stack, aliases) tuple.
+    """
+    (addrs, originalstack) = ([], [])
+    aliases = []
     pos = f.tell()
     line = f.readline()
-    # FIXME check for stack condition first (that it starts with '\t') and
-    # rewind/bail out otherwise
+    # FIXME add support for aliased stacks
+    # not sure which would be better:
+    #   > creating fake traces for aliased stacks and listing these traces as
+    #       aliases in the original trace
+    #   > keeping them around in the original trace
     if not line or line == '\n':
-        return addrs
+        return (addrs, [])
     elif not line.startswith('\t'):
         f.seek(pos, os.SEEK_SET)
-        return addrs
+        return (addrs, [])
     while line and line != '\n' and line.startswith('\t'):
-        addrs.append(int(line.strip('\t\n'), 16))
+        addr = line.strip('\t\n')
+        if addr == 'Alias': # alias stack follows
+            if not originalstack:
+                originalstack = addrs
+            addrs = []
+            aliases.append(addrs)
+        else:
+            addrs.append(int(addr, 16))
         line = f.readline()
-    return addrs
+    return (originalstack or addrs, aliases)
+
 
 class Backtrace(object):
     """Process memory snapshot.
@@ -55,7 +73,8 @@ class Backtrace(object):
     Heaps: dict of allocations, keyed by heap handle
         {heaphandle: allocations}
     Allocations: dict of allocation samples keyed by trace id
-        {traceid: allocation(id, stack, allocs=[(requested, overhead, address)])}
+        {traceid: allocation(id, stack, allocs=[(requested, overhead,
+                                                    address)])}
     """
 
     _heaphandle_re_ = re.compile(r'Heap ([0-9A-Fa-f]+) Hogs')
@@ -63,7 +82,7 @@ class Backtrace(object):
             '([0-9A-Fa-f]+) by BackTrace([0-9A-Fa-f]+)')
     _module_re_ = re.compile(r'([0-9A-Fa-f]+)\s+([0-9A-Fa-f]+) ([^\n]+)$')
     sample = namedtuple('sample', 'requested overhead address')
-    allocation = namedtuple('allocation', 'stack allocs')
+    allocation = namedtuple('allocation', 'stack aliases allocs')
     module = namedtuple('module', 'BaseOfImage SizeOfImage ModuleName')
     magic = 'hdmuyp'
 
@@ -79,6 +98,7 @@ class Backtrace(object):
         self._uniqueallocs = {}
         if datafile:
             if isinstance(datafile, basestring):
+                self._path = datafile
                 with open(datafile, 'r') as f:
                     self._parse(f)
             else:
@@ -107,6 +127,12 @@ class Backtrace(object):
 
     def dump_allocs(self, handle=None, symbols=None, grepfn=None, \
             fileobject=None):
+        def sumaddrs(iterable):
+            _sum = 0
+            for requested, overhead, _ in iterable:
+                _sum += requested + overhead
+            return _sum
+
         """Dumps allocations (for specified heap or all).
 
         |grepfn|        filter to run on allocations
@@ -133,6 +159,10 @@ class Backtrace(object):
             for traceid, alloc in ifilter(grepfn, iterable):
                 mergeallocs = self._uniqueallocs.get(traceid) or []
                 self._print('Traceid: 0x%x' % traceid, fileobject=fileobject)
+                self._print('Memory entries: %d' % \
+                        (len(alloc.allocs)+len(mergeallocs)), fileobject)
+                self._print('Memory size: %s' % fmt_size(sumaddrs(chain(alloc.allocs, \
+                        mergeallocs))), fileobject)
                 self._print('Memory: [%s]' % ','.join(map(hex, \
                     [addr for _,_,addr in chain(alloc.allocs, \
                                                 mergeallocs)])), \
@@ -181,6 +211,7 @@ class Backtrace(object):
                     # skip over this trace if the grep is negative
                     if adiff and grepfn((None, alloc)):
                         diffalloc = self.allocation(stack=alloc.stack, \
+                                                    aliases=[],
                                                     allocs=adiff)
                         diffheap.setdefault(trace, diffalloc)
                         diff._allocs.update({trace: diffalloc})
@@ -315,7 +346,8 @@ class Backtrace(object):
                     for k in xrange(allocslen):
                         allocs.append(self.sample(*struct.unpack_from('LLL', \
                             data.read(dword*3))))
-                    allocation = self.allocation(stack=stack, allocs=allocs)
+                    allocation = self.allocation(stack=stack, aliases=[], \
+                                                    allocs=allocs)
                     heap.setdefault(traceid, allocation)
                     self._allocs.setdefault(traceid, allocation)
                 self._heaps.setdefault(handle, heap)
@@ -345,7 +377,7 @@ class Backtrace(object):
                 traceid = int(traceid, 16)
                 item = allocs.setdefault(traceid, None)
                 # parse allocation
-                stack = _parse_stack(f)
+                stack, aliases = _parse_stack(f)
                 sample = self.sample(requested=int(requested, 16), \
                                     overhead=int(overhead, 16), \
                                     address=int(addr, 16))
@@ -355,7 +387,7 @@ class Backtrace(object):
                     item.allocs.append(sample)
                 else:
                     allocs.update({traceid: self.allocation(stack=stack, \
-                                                allocs=[sample])})
+                                            aliases=aliases, allocs=[sample])})
             elif line.startswith('*- - - - - - - - - - End of data for heap'):
                 break
             line = _next_line(f)

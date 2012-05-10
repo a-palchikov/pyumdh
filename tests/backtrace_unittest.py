@@ -2,6 +2,7 @@
 from pyumdh.backtrace import Backtrace
 from unittest import TestCase, main
 import os
+import pdb
 
 class BacktraceParseTest(TestCase):
     def setUp(self):
@@ -15,12 +16,13 @@ class BacktraceParseTest(TestCase):
         self.assertEquals(len(self._trace._modules), 17)
         self.assertEquals(len(self._trace._heaps), 2)
         heap = self._trace._heaps[0x2E60000]
-        self.assertEquals(len(heap), 5)
+        self.assertEquals(len(heap), 7)
         stack = heap[0x18D0A0D0].stack
         self.assertEquals(len(stack), 32)
         self.assertEquals(len(heap[0x1AF07D3C].allocs), 3)
         self.assertEquals(len(heap[0x1AF083B4].allocs), 2)
         self.assertEquals(len(heap[0x1AF0B99C].allocs), 1)
+        self.assertTrue(len(heap[0x1BA12BFA].stack) == 1)
 
     def test_SaveLoad(self):
         self._trace.save(r'test.tmp')

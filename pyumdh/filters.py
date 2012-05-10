@@ -1,4 +1,5 @@
-# some useful filter decorators
+# vim:ts=4:sw=4:expandtab
+"""Collection of useful filters"""
 
 from functools import wraps
 from symprovider import format_symbol_module
@@ -76,12 +77,15 @@ class ForeignModule(object):
         for addr in allocation.stack:
             finder.send(addr)
         """
+
         def _trusted_module(module):
             return _sys_module(module) or os.path.basename(module).lower() in self._sysmodules
+
         def _pattern(symbol, patterns):
             for p in patterns:
                 if p.search(symbol):
                     return True
+
         matched = False
         while not matched:
             sym, _, module = self._symbols.sym_from_addr(self._trace, (yield))
@@ -136,6 +140,7 @@ def grep_filter(trace, symbols, pattern):
     |trace|         trace to work on
     |symbols|       symbols provider
     """
+
     def _grepfn(item):
         allocation = item[1]
         stack = allocation.stack
@@ -147,5 +152,6 @@ def grep_filter(trace, symbols, pattern):
             symbol = _format_symbol(sym, module)
             if repattern.search(symbol):
                 return True
+
     return _grepfn
 

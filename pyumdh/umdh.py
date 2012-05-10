@@ -6,17 +6,18 @@
 
 import optparse
 import os
-import pyumdh.config as config
 import logging
 import re
 import imp
+import types
+import pdb
 from subprocess import Popen, PIPE, check_output, CalledProcessError
 from multiprocessing import Process, Pool, freeze_support
 from fnmatch import fnmatch
 from optparse import OptionParser
-import types
-import pyumdh.dynlib as dynlib
-import pdb
+import pyumdh.utils as utils
+import pyumdh.config as config
+
 
 def _prelaunch_env(pypath=None):
     env = os.environ
@@ -27,24 +28,11 @@ def _prelaunch_env(pypath=None):
                     creationflags=subprocess.CREATE_NEW_CONSOLE, \
                     env=env)
 
-def _module_to_dict(module):
-    return {k:v for k,v in vars(module).iteritems() if k[2:] != '__' and k[-2:] != '__'}
-
 def _tool_path(toolname, config):
-    return os.path.join(config['DBG_TOOLS_PATH'], toolname)
-
-def _data_dir(config, curdir=None):
-    datapath = config.get('WORK_DIR')
-    if not datapath:
-        datapath = curdir or dynlib.module_path()
-    else:
-        datapath = os.path.abspath(datapath)
-    if not os.path.exists(datapath):
-        os.mkdir(datapath)
-    return datapath
+    return os.path.join(config.DBG_TOOLS_PATH, toolname)
 
 def _data_file(fn, config, curdir=None):
-    datapath = _data_dir(config, curdir)
+    datapath = utils.data_dir(config.get('WORK_DIR', curdir))
     return os.path.join(datapath, fn)
 
 def _find_pid(pname, config):
@@ -59,8 +47,8 @@ def _find_pid(pname, config):
             return int(pid)
         raise ValueError('Unable to find process with name %s' % pname)
     except CalledProcessError:
-        log.critical('unable to map process name to id - tool not found - %s' % \
-                        tool)
+        log.critical('unable to map process name to id - tool not found - ' \
+                        '%s' % tool)
 
 def umdh(pid, config):
     log = logging.getLogger('umdh')
@@ -86,7 +74,7 @@ def umdh(pid, config):
     log.debug('UMDH: will save log to %s' % outputfile)
     p = Popen([tool, '-snap', str(pid), '-file', outputfile], \
             stdout=PIPE, stderr=PIPE, \
-            env={'_NT_SYMBOL_PATH': ';'.join(config['DBG_SYMBOL_PATHS'])})
+            env={'_NT_SYMBOL_PATH': ';'.join(config.DBG_SYMBOL_PATHS)})
     out, err = p.communicate()
     if out:
         log.debug('UMDH[Output]: %s' % out)
@@ -117,15 +105,15 @@ def main(argv):
             help='log file (default is %default)')
     opts, args = parser.parse_args(argv)
 
-    binpath = dynlib.module_path()
+    binpath = utils.module_path()
     # load configuration and map its contents to a dict so that we could later
     # merge stock options with any dynamic content
     configpath = os.path.join(binpath, 'config.py')
     if os.path.exists(configpath):
         extconfig = imp.load_source('config', configpath)
-        configopts = _module_to_dict(extconfig)
+        configopts = utils.Dictify(extconfig)
     else:
-        configopts = _module_to_dict(config)
+        configopts = utils.Dictify(config)
 
     log = logging.getLogger('umdh')
     log.addHandler(logging.StreamHandler())
@@ -134,7 +122,7 @@ def main(argv):
     if opts.verbose:
         log.setLevel(logging.DEBUG)
 
-    datadir = _data_dir(config=configopts, curdir=binpath)
+    datadir = utils.data_dir(configopts.get('WORK_DIR', binpath))
     log.debug('data files are here=%s' % datadir)
 
     configerrors = []
@@ -175,7 +163,7 @@ def main(argv):
         # i.e. file for the current session
         fn = cachefiles.pop()
         cachedconfig = imp.load_source('config', os.path.join(datadir, fn))
-        cachedopts = _module_to_dict(cachedconfig)
+        cachedopts = utils.Dictify(cachedconfig)
         configopts.update(cachedopts)
         pid = int(configopts['active_pid'])
     umdh(pid, configopts)

@@ -1,21 +1,12 @@
 from ctypes import windll, WinDLL, LibraryLoader, GetLastError, \
         windll as windll0, FormatError, WinError, Structure
 from ctypes.wintypes import WORD, BYTE
+import pyumdh.utils as utils
 import os
 import sys
 import pdb
 
-__all__ = ['wdll', 'windll', 'module_path']
-
-def _frozen():
-    return hasattr(sys, 'frozen')
-
-def module_path():
-    """Returns path to this executable/script."""
-    if _frozen():
-        return os.path.dirname(unicode(sys.executable, \
-            sys.getfilesystemencoding()))
-    return os.path.dirname(unicode(__file__, sys.getfilesystemencoding()))
+__all__ = ['wdll', 'windll']
 
 def _win64():
     import platform
@@ -72,7 +63,7 @@ class WindowsLibraryLoader(LibraryLoader):
         return dll
 
 wdll = WindowsLibraryLoader(WindowsLibrary)
-wdll.add_path(os.path.join(module_path(), 'x64' if _win64() else 'x86'))
+wdll.add_path(os.path.join(utils.module_path(), 'x64' if _win64() else 'x86'))
 
 
 from logging import getLogger
