@@ -5,21 +5,21 @@
 import os
 import sys
 import pdb
-#import types
+import types
 try:
     import cpickle as pickle
 except ImportError:
     import pickle
 
 __all__ = ['file_open', 'SymProxy', 'module_to_dict', 'module_path', \
-            'data_dir', 'Dictify']
+            'data_dir', 'Attributify', 'frozen', 'duplicate_levels']
 
-def _frozen():
+def frozen():
     return hasattr(sys, 'frozen')
 
 def module_path():
     """Returns path to this executable/script."""
-    if _frozen():
+    if frozen():
         return os.path.dirname(unicode(sys.executable, \
             sys.getfilesystemencoding()))
     return os.path.dirname(unicode(__file__, sys.getfilesystemencoding()))
@@ -62,31 +62,34 @@ def fmt_size(size):
     return ('%3.2f %s' if _floor<size else '%d %s') % (size, 'Tb')
 
 
-class Dictify(object):
-    def __init__(self, module):
-        #assert(isinstance(module, types.ModuleType))
-        self._module = {k:v for k,v in vars(module).iteritems() \
-                        if k[2:] != '__' and k[-2:] != '__'}
+class Attributify(object):
+    def __init__(self, data):
+        #assert()
+        if isinstance(data, types.ModuleType):
+            self._dict = {k:v for k,v in vars(data).iteritems() \
+                            if k[2:] != '__' and k[-2:] != '__'}
+        else:
+            self._dict = dict(data)
 
     def __getattr__(self, name):
-        return self._module[name]
+        return self._dict[name]
 
     __getitem__ = __getattr__
 
     def get(self, name, default=None):
-        return self._module.get(name, default)
+        return self._dict.get(name, default)
 
     def update(self, _dict):
-        if isinstance(_dict, Dictify):
-            self._module.update(_dict._module)
+        if isinstance(_dict, Attributify):
+            self._dict.update(_dict._dict)
         else:
-            self._module.update(dict(_dict))
+            self._dict.update(dict(_dict))
 
     def setdefault(self, name, default):
-        return self._module.setdefault(name, default)
+        return self._dict.setdefault(name, default)
 
     def iteritems(self):
-        return self._module.iteritems()
+        return self._dict.iteritems()
 
 class SymPassthrough(object):
     def __init__(self, symbols):
@@ -141,4 +144,8 @@ class SymProxy(object):
         for frequency, sym in symbols:
             fileobject.write('%d: %s\n' % (frequency, sym[0]))
 
+
+# levels for duplicate compression
+duplicate_levels = Attributify({k:v for v,k in enumerate( \
+                                ['aggressive', 'strict'])})
 

@@ -19,7 +19,6 @@ import os
 import sys
 import pdb
 
-
 def _binary_backtrace_path(filepath):
     binfn = os.path.basename(filepath)
     binfn = '%s.bin' % binfn[:-4]
@@ -80,9 +79,9 @@ if __name__ == '__main__':
     configpath = os.path.join(binpath, 'config.py')
     if os.path.exists(configpath):
         extconfig = imp.load_source('config', configpath)
-        config = utils.Dictify(extconfig)
+        config = utils.Attributify(extconfig)
     else:
-        config = utils.Dictify(config)
+        config = utils.Attributify(config)
 
     parser = OptionParser()
     parser.add_option('--data-file', dest='logs', action='append', \
@@ -92,8 +91,8 @@ if __name__ == '__main__':
     parser.add_option('--out-file', dest='outfile', \
             help='specify file to save results to (defaults to stdout)' \
             ' (names the binary file if --save-binary has been specified!)')
-    parser.add_option('--duplicates', action='store_true', \
-            help='do not remove duplicates')
+    #parser.add_option('--duplicates', action='store_true', \
+    #        help='do not remove duplicates')
     parser.add_option('--trusted-pattern', dest='patterns', \
             action='append', default=[], \
             help='specify additional trusted pattern')
@@ -131,7 +130,7 @@ if __name__ == '__main__':
         log.debug('using cached config: %s' % cachefile)
         cachedconfig = imp.load_source('config', \
                                 os.path.join(datadir, cachefile))
-        cachedopts = utils.Dictify(cachedconfig)
+        cachedopts = utils.Attributify(cachedconfig)
         config.update(cachedopts)
     # in case we receive ids for log files on the command line
     # guess them by probing files in the configured working directory
@@ -159,10 +158,19 @@ if __name__ == '__main__':
                     trustedmodules=modules, \
                     trustedpatterns=patterns)
         # compute diff for the last two data files
-        pdb.set_trace()
+        if not utils.frozen():
+            pdb.set_trace()
         diff = traces[-2].diff_with(traces[-1], grepfn=grepfn)
-        if not opts.duplicates and config.REMOVE_DUPLICATES:
-            diff.compress_duplicates()
+        #if not opts.duplicates and config.REMOVE_DUPLICATES:
+        if config.COMPRESS_DUPLICATES:
+            try:
+                level = utils.duplicate_levels[config.COMPRESS_DUPLICATES]
+            except ValueError:
+                log.warning('Invalid duplicate compression level: %s' \
+                        % level)
+            else:
+                diff.compress_duplicates(level)
+
         if not opts.savebin:
             if opts.outfile:
                 fileobject = open(opts.outfile, 'w')

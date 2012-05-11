@@ -33,8 +33,11 @@ WORK_DIR = 'data'
 
 # This is an optimization that will compress likely duplicate traces into a
 # single trace
-# FIXME combine all allocations so no information is lost
-REMOVE_DUPLICATES = True
+# Possible values are:
+#   'strict'        - faster compression mode that tolerates up to 30% on top
+#   'aggressive'
+#   '' or None      - switches duplicate compression off
+COMPRESS_DUPLICATES = 'aggressive'
 
 # Stack frames with these patterns matched will be skipped from diff/dump
 # Note, the setting is crrent effective only in backtrace.py when it's

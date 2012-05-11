@@ -10,17 +10,24 @@ import sys
 import struct
 import io
 from collections import namedtuple
-from itertools import combinations, groupby, ifilter, chain
+from itertools import combinations, groupby, ifilter, chain, izip, takewhile
 from pyumdh.symprovider import format_symbol_module
 import pyumdh.config as config
 from pyumdh.symprovider import symbols
-from pyumdh.utils import SymProxy, file_open, fmt_size
+import pyumdh.utils as utils
 try:
     from cStringIO import StringIO
 except ImportError:
     from StringIO import StringIO
 import pdb
 
+
+def _quick_compare_stacks(stack1, stack2, threshold=0.7):
+    """Compare stacks given a tolerance level."""
+    stacklen = max(len(stack1), len(stack2))
+    matchlen = len([a for a in takewhile(lambda x: x[0] == x[1], izip(stack1, \
+                        stack2))])
+    return matchlen >= int(stacklen * threshold)
 
 # parsing helpers
 def _next_line(f):
@@ -161,7 +168,8 @@ class Backtrace(object):
                 self._print('Traceid: 0x%x' % traceid, fileobject=fileobject)
                 self._print('Memory entries: %d' % \
                         (len(alloc.allocs)+len(mergeallocs)), fileobject)
-                self._print('Memory size: %s' % fmt_size(sumaddrs(chain(alloc.allocs, \
+                self._print('Memory size: %s' % utils.fmt_size( \
+                        sumaddrs(chain(alloc.allocs, \
                         mergeallocs))), fileobject)
                 self._print('Memory: [%s]' % ','.join(map(hex, \
                     [addr for _,_,addr in chain(alloc.allocs, \
@@ -217,25 +225,29 @@ class Backtrace(object):
                         diff._allocs.update({trace: diffalloc})
         return diff
 
-    def compress_duplicates(self):
+    def compress_duplicates(self, level):
+        assert(level is not None)
+        duplicates = []
+        def aggressively(heap):
+            for pair in combinations(heap.iterkeys(), 2):
+                seq1 = heap[pair[0]]
+                seq2 = heap[pair[1]]
+                foo = difflib.SequenceMatcher(None, seq1.stack, \
+                                        seq2.stack, autojunk=False)
+                if foo.quick_ratio() > 0.88:
+                    yield pair
+
+        def strictly(heap):
+            for pair in combinations(heap.iterkeys(), 2):
+                if _quick_compare_stacks(seq1.stack, seq2.stack):
+                    yield pair
+
+        compressor = aggressively if level == \
+                        utils.duplicate_levels.aggressive else strictly
         # FIXME maybe return a copy of Backtrace with duplicates removed
         for heap in self._heaps.itervalues():
-            # compute duplicates
-            duplicates = []
             if len(heap) > 0:
-                for pair in combinations(heap.iterkeys(), 2):
-                    seq1 = heap[pair[0]]
-                    seq2 = heap[pair[1]]
-                    foo = difflib.SequenceMatcher(None, seq1.stack, \
-                                            seq2.stack, autojunk=False)
-                    if foo.quick_ratio() > 0.88:
-                        # likely duplicates
-                        # compute longest match and make sure it's as long as
-                        # 70% of the stack
-                        i, _, k = foo.find_longest_match(0, len(seq1.stack), \
-                                                            0, len(seq2.stack))
-                        if i == 0 and k >= int(math.floor(len(seq1) * 0.7)):
-                            duplicates.append(pair)
+                duplicates = [_ for _ in compressor(heap)]
             if duplicates:
                 seen = set() # traces we've seen so far
                 mergeallocs = {}
@@ -269,7 +281,7 @@ class Backtrace(object):
     def save(self, fileobject):
         """Saves a Backtrace to fileobject in binary form"""
         try:
-            fileobject, close = file_open(fileobject, 'wb')
+            fileobject, close = utils.file_open(fileobject, 'wb')
 
             fileobject.write(self.magic)
             # modules
@@ -313,7 +325,7 @@ class Backtrace(object):
         See self.save() for the persisting counterpart.
         """
         try:
-            fileobject, close = file_open(fileobject, 'rb')
+            fileobject, close = utils.file_open(fileobject, 'rb')
 
             data = fileobject
             #data = StringIO(fileobject.read())
@@ -439,6 +451,6 @@ if __name__ == '__main__':
     with symbols(bin_path=';'.join(config.DBG_BIN_PATHS), \
                     sym_path=';'.join(config.DBG_SYMBOL_PATHS)) as _sym:
         symcache = sys.argv[2:]
-        sym = SymProxy(_sym, symcache[0]) if symcache else _sym
+        sym = utils.SymProxy(_sym, symcache[0]) if symcache else _sym
         trace.dump_allocs(symbols=sym)
 

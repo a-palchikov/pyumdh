@@ -111,9 +111,9 @@ def main(argv):
     configpath = os.path.join(binpath, 'config.py')
     if os.path.exists(configpath):
         extconfig = imp.load_source('config', configpath)
-        configopts = utils.Dictify(extconfig)
+        configopts = utils.Attributify(extconfig)
     else:
-        configopts = utils.Dictify(config)
+        configopts = utils.Attributify(config)
 
     log = logging.getLogger('umdh')
     log.addHandler(logging.StreamHandler())
@@ -163,7 +163,7 @@ def main(argv):
         # i.e. file for the current session
         fn = cachefiles.pop()
         cachedconfig = imp.load_source('config', os.path.join(datadir, fn))
-        cachedopts = utils.Dictify(cachedconfig)
+        cachedopts = utils.Attributify(cachedconfig)
         configopts.update(cachedopts)
         pid = int(configopts['active_pid'])
     umdh(pid, configopts)
